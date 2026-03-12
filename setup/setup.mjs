@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import * as clack from '@clack/prompts';
 
 import { createDirLink } from './lib/fs-utils.mjs';
+import { initDatabase } from '../lib/db/index.js';
 
 import {
   checkPrerequisites,
@@ -281,13 +282,28 @@ async function main() {
     clack.log.info('Install Docker: https://docs.docker.com/get-docker/');
   }
 
+  // Initialize database (needed for storing secrets)
+  try {
+    initDatabase();
+  } catch (err) {
+    clack.log.warn(`Database init: ${err.message}`);
+  }
+
   // ─── Step 2: GitHub PAT ──────────────────────────────────────────────
   clack.log.step(`[${++currentStep}/${TOTAL_STEPS}] GitHub Personal Access Token`);
   clack.log.info('Your agent needs permission to create branches and pull requests in your GitHub repo. A Personal Access Token (PAT) grants this access.');
 
+  // Check DB first for existing GH_TOKEN, then fall back to .env
+  let existingGhToken = null;
+  try {
+    const { getConfigSecret } = await import('../lib/db/config.js');
+    existingGhToken = getConfigSecret('GH_TOKEN');
+  } catch {}
+  if (!existingGhToken) existingGhToken = env?.GH_TOKEN || null;
+
   let pat = null;
-  if (await keepOrReconfigure('GitHub PAT', env?.GH_TOKEN ? maskSecret(env.GH_TOKEN) : null)) {
-    pat = env.GH_TOKEN;
+  if (await keepOrReconfigure('GitHub PAT', existingGhToken ? maskSecret(existingGhToken) : null)) {
+    pat = existingGhToken;
   }
 
   if (!pat) {
@@ -380,38 +396,64 @@ async function main() {
   let agentProvider = null;
   let agentModel = null;
 
+  // Check DB for existing LLM config, fall back to .env
+  let existingLlmProvider = null;
+  let existingLlmModel = null;
+  try {
+    const { getConfigValue } = await import('../lib/db/config.js');
+    existingLlmProvider = getConfigValue('LLM_PROVIDER');
+    existingLlmModel = getConfigValue('LLM_MODEL');
+  } catch {}
+  if (!existingLlmProvider) existingLlmProvider = env?.LLM_PROVIDER || null;
+  if (!existingLlmModel) existingLlmModel = env?.LLM_MODEL || null;
+
   // Build display string for existing LLM config
   let llmDisplay = null;
-  if (env?.LLM_PROVIDER && env?.LLM_MODEL) {
-    const existingEnvKey = env.LLM_PROVIDER === 'custom'
+  if (existingLlmProvider && existingLlmModel) {
+    const existingEnvKey = existingLlmProvider === 'custom'
       ? 'CUSTOM_API_KEY'
-      : PROVIDERS[env.LLM_PROVIDER]?.envKey;
+      : PROVIDERS[existingLlmProvider]?.envKey;
 
     if (existingEnvKey) {
-      const existingKey = env[existingEnvKey];
-      const providerLabel = env.LLM_PROVIDER === 'custom'
+      // Check DB for existing key, fall back to .env
+      let existingKey = null;
+      try {
+        const { getConfigSecret } = await import('../lib/db/config.js');
+        existingKey = getConfigSecret(existingEnvKey);
+      } catch {}
+      if (!existingKey) existingKey = env?.[existingEnvKey] || null;
+
+      const providerLabel = existingLlmProvider === 'custom'
         ? 'Local (OpenAI Compatible API)'
-        : (PROVIDERS[env.LLM_PROVIDER]?.label || env.LLM_PROVIDER);
+        : (PROVIDERS[existingLlmProvider]?.label || existingLlmProvider);
       llmDisplay = existingKey
-        ? `${providerLabel} / ${env.LLM_MODEL} (${maskSecret(existingKey)})`
-        : `${providerLabel} / ${env.LLM_MODEL}`;
-      if ((env.LLM_PROVIDER === 'openai' || env.LLM_PROVIDER === 'custom') && env.OPENAI_BASE_URL) {
-        llmDisplay += ` @ ${env.OPENAI_BASE_URL}`;
+        ? `${providerLabel} / ${existingLlmModel} (${maskSecret(existingKey)})`
+        : `${providerLabel} / ${existingLlmModel}`;
+      const existingBaseUrl = env?.OPENAI_BASE_URL;
+      if ((existingLlmProvider === 'openai' || existingLlmProvider === 'custom') && existingBaseUrl) {
+        llmDisplay += ` @ ${existingBaseUrl}`;
       }
     }
   }
 
   if (llmDisplay && await keepOrReconfigure('LLM', llmDisplay)) {
     // Keep existing LLM config
-    chatProvider = env.LLM_PROVIDER;
-    chatModel = env.LLM_MODEL;
+    chatProvider = existingLlmProvider;
+    chatModel = existingLlmModel;
     const existingEnvKey = chatProvider === 'custom'
       ? 'CUSTOM_API_KEY'
       : PROVIDERS[chatProvider].envKey;
     collected.LLM_PROVIDER = chatProvider;
     collected.LLM_MODEL = chatModel;
-    collected[existingEnvKey] = env[existingEnvKey] || '';
-    if (env.OPENAI_BASE_URL) {
+    // Read existing API key from DB or .env
+    let existingApiKey = null;
+    try {
+      const { getConfigSecret } = await import('../lib/db/config.js');
+      existingApiKey = getConfigSecret(existingEnvKey);
+    } catch {}
+    if (!existingApiKey) existingApiKey = env?.[existingEnvKey] || '';
+    collected[existingEnvKey] = existingApiKey;
+    if (env?.OPENAI_BASE_URL) {
       openaiBaseUrl = env.OPENAI_BASE_URL;
       collected.OPENAI_BASE_URL = openaiBaseUrl;
     }
@@ -532,18 +574,33 @@ async function main() {
       // OAuth prompt — only when agent provider is Anthropic
       if (agentProviderConfig.oauthSupported) {
         let skipOAuth = false;
-        if (env?.CLAUDE_CODE_OAUTH_TOKEN) {
+        // Check DB first for existing OAuth token, then .env
+        let existingOAuth = null;
+        try {
+          const { getConfigSecret } = await import('../lib/db/config.js');
+          existingOAuth = getConfigSecret('CLAUDE_CODE_OAUTH_TOKEN');
+        } catch {}
+        if (!existingOAuth) existingOAuth = env?.CLAUDE_CODE_OAUTH_TOKEN || null;
+
+        if (existingOAuth) {
+          const existingBackend = env?.AGENT_BACKEND || 'claude-code';
           skipOAuth = await keepOrReconfigure(
             'Claude OAuth Token',
-            `${maskSecret(env.CLAUDE_CODE_OAUTH_TOKEN)} (agent backend: ${env.AGENT_BACKEND || 'claude-code'})`
+            `${maskSecret(existingOAuth)} (agent backend: ${existingBackend})`
           );
           if (skipOAuth) {
-            collected.CLAUDE_CODE_OAUTH_TOKEN = env.CLAUDE_CODE_OAUTH_TOKEN;
-            collected.AGENT_BACKEND = env.AGENT_BACKEND || 'claude-code';
+            collected.CLAUDE_CODE_OAUTH_TOKEN = existingOAuth;
+            collected.AGENT_BACKEND = existingBackend;
 
             // OAuth replaces the API key for agent jobs — don't push it to GitHub.
             if (collected.ANTHROPIC_API_KEY) {
-              updateEnvVariable('ANTHROPIC_API_KEY', collected.ANTHROPIC_API_KEY);
+              // Store API key in DB only (for chat), don't sync to GitHub
+              try {
+                const { setConfigSecret } = await import('../lib/db/config.js');
+                setConfigSecret('ANTHROPIC_API_KEY', collected.ANTHROPIC_API_KEY, 'setup');
+              } catch {
+                updateEnvVariable('ANTHROPIC_API_KEY', collected.ANTHROPIC_API_KEY);
+              }
               delete collected.ANTHROPIC_API_KEY;
             }
             delete collected['__agentApiKey'];
@@ -608,9 +665,14 @@ async function main() {
               collected.AGENT_BACKEND = 'claude-code';
 
               // OAuth replaces the API key for agent jobs — don't push it to GitHub.
-              // The key is still needed in .env for the event handler chat, so write it directly.
+              // The key is still needed for the event handler chat, so store it in DB directly.
               if (collected.ANTHROPIC_API_KEY) {
-                updateEnvVariable('ANTHROPIC_API_KEY', collected.ANTHROPIC_API_KEY);
+                try {
+                  const { setConfigSecret } = await import('../lib/db/config.js');
+                  setConfigSecret('ANTHROPIC_API_KEY', collected.ANTHROPIC_API_KEY, 'setup');
+                } catch {
+                  updateEnvVariable('ANTHROPIC_API_KEY', collected.ANTHROPIC_API_KEY);
+                }
                 delete collected.ANTHROPIC_API_KEY;
               }
               delete collected['__agentApiKey'];

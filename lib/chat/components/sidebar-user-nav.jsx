@@ -44,7 +44,7 @@ export function SidebarUserNav({ user, collapsed }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="w-56">
             <DropdownMenuItem asChild>
-              <a href="/settings" className="flex items-center gap-2" style={{ textDecoration: 'inherit', color: 'inherit' }}>
+              <a href="/settings" className="w-full flex items-center gap-2" style={{ textDecoration: 'inherit', color: 'inherit' }}>
                 <SettingsIcon size={14} />
                 <span>Settings</span>
               </a>
@@ -56,7 +56,7 @@ export function SidebarUserNav({ user, collapsed }) {
               </DropdownMenuItem>
             )}
             <DropdownMenuItem asChild>
-              <a href="https://github.com/stephengpope/thepopebot/issues" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2" style={{ textDecoration: 'inherit', color: 'inherit' }}>
+              <a href="https://github.com/stephengpope/thepopebot/issues" target="_blank" rel="noopener noreferrer" className="w-full flex items-center gap-2" style={{ textDecoration: 'inherit', color: 'inherit' }}>
                 <BugIcon size={14} />
                 <span>Report Issues</span>
               </a>

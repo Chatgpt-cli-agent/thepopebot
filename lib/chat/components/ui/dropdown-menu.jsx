@@ -12,7 +12,7 @@ export function DropdownMenu({ children, open: controlledOpen, onOpenChange: con
 
   return (
     <DropdownContext.Provider value={{ open, onOpenChange }}>
-      <div className="relative inline-block">{children}</div>
+      <div className="relative">{children}</div>
     </DropdownContext.Provider>
   );
 }

@@ -7,8 +7,9 @@ import { chat, summarizeJob } from '../lib/ai/index.js';
 import { createNotification } from '../lib/db/notifications.js';
 import { loadTriggers } from '../lib/triggers.js';
 import { verifyApiKey } from '../lib/db/api-keys.js';
+import { getConfig } from '../lib/config.js';
 
-// Bot token from env, can be overridden by /telegram/register
+// Bot token — resolved from DB/env, can be overridden by /telegram/register
 let telegramBotToken = null;
 
 // Cached trigger firing function (initialized on first request)
@@ -16,7 +17,7 @@ let _fireTriggers = null;
 
 function getTelegramBotToken() {
   if (!telegramBotToken) {
-    telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || null;
+    telegramBotToken = getConfig('TELEGRAM_BOT_TOKEN') || null;
   }
   return telegramBotToken;
 }
@@ -103,7 +104,7 @@ async function handleTelegramRegister(request) {
   }
 
   try {
-    const result = await setWebhook(bot_token, webhook_url, process.env.TELEGRAM_WEBHOOK_SECRET);
+    const result = await setWebhook(bot_token, webhook_url, getConfig('TELEGRAM_WEBHOOK_SECRET'));
     telegramBotToken = bot_token;
     return Response.json({ success: true, result });
   } catch (err) {
@@ -159,7 +160,7 @@ async function processChannelMessage(adapter, normalized) {
 }
 
 async function handleGithubWebhook(request) {
-  const { GH_WEBHOOK_SECRET } = process.env;
+  const GH_WEBHOOK_SECRET = getConfig('GH_WEBHOOK_SECRET');
 
   // Validate webhook secret (timing-safe, required)
   if (!GH_WEBHOOK_SECRET || !safeCompare(request.headers.get('x-github-webhook-secret-token'), GH_WEBHOOK_SECRET)) {

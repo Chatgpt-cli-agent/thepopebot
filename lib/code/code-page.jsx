@@ -2,11 +2,15 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { AppSidebar } from '../chat/components/app-sidebar.js';
 import { SidebarProvider, SidebarInset } from '../chat/components/ui/sidebar.js';
 import { ChatNavProvider } from '../chat/components/chat-nav-context.js';
 import { ChatHeader } from '../chat/components/chat-header.js';
 import { ConfirmDialog } from '../chat/components/ui/confirm-dialog.js';
+import { CodeIcon, TerminalIcon, SpinnerIcon } from '../chat/components/icons.js';
 import { cn } from '../chat/utils.js';
 import {
   ensureCodeWorkspaceContainer,
@@ -19,6 +23,43 @@ import {
 
 const TerminalView = dynamic(() => import('./terminal-view.js'), { ssr: false });
 
+function getStorageKey(id) {
+  return `code-tab-order-${id}`;
+}
+
+function saveTabOrder(id, tabs) {
+  try {
+    const ids = tabs.filter((t) => t.id !== 'claude-code').map((t) => t.id);
+    if (ids.length > 0) {
+      localStorage.setItem(getStorageKey(id), JSON.stringify(ids));
+    } else {
+      localStorage.removeItem(getStorageKey(id));
+    }
+  } catch {}
+}
+
+function loadTabOrder(id) {
+  try {
+    const raw = localStorage.getItem(getStorageKey(id));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function reorderByStored(tabs, storedOrder) {
+  if (!storedOrder || storedOrder.length === 0) return tabs;
+  const primary = tabs[0]; // claude-code always first
+  const dynamic = tabs.slice(1);
+  const orderMap = new Map(storedOrder.map((id, i) => [id, i]));
+  dynamic.sort((a, b) => {
+    const ai = orderMap.has(a.id) ? orderMap.get(a.id) : Infinity;
+    const bi = orderMap.has(b.id) ? orderMap.get(b.id) : Infinity;
+    return ai - bi;
+  });
+  return [primary, ...dynamic];
+}
+
 export default function CodePage({ session, codeWorkspaceId }) {
   const [dialogState, setDialogState] = useState('closed'); // 'closed' | 'loading' | 'safe' | 'warning' | 'error'
   const [gitStatus, setGitStatus] = useState(null);
@@ -30,24 +71,55 @@ export default function CodePage({ session, codeWorkspaceId }) {
   ]);
   const [activeTabId, setActiveTabId] = useState('claude-code');
   const [creatingShell, setCreatingShell] = useState(false);
+  const [creatingCode, setCreatingCode] = useState(false);
   const [closingTabId, setClosingTabId] = useState(null);
 
-  // Restore existing shell sessions on mount
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  // Restore existing sessions on mount
   useEffect(() => {
     listTerminalSessions(codeWorkspaceId).then((result) => {
       if (result?.success && result.sessions?.length > 0) {
-        setTabs((prev) => [
-          prev[0],
-          ...result.sessions.map((s) => ({ id: s.id, label: s.label, type: 'shell' })),
-        ]);
+        const restored = [
+          { id: 'claude-code', label: 'Code', type: 'claude' },
+          ...result.sessions.map((s) => ({ id: s.id, label: s.label, type: s.type || 'shell' })),
+        ];
+        const storedOrder = loadTabOrder(codeWorkspaceId);
+        setTabs(reorderByStored(restored, storedOrder));
       }
     });
+  }, [codeWorkspaceId]);
+
+  // Persist tab order when tabs change
+  useEffect(() => {
+    if (tabs.length > 1) {
+      saveTabOrder(codeWorkspaceId, tabs);
+    }
+  }, [tabs, codeWorkspaceId]);
+
+  const handleNewCode = useCallback(async () => {
+    setCreatingCode(true);
+    try {
+      const result = await createTerminalSession(codeWorkspaceId, 'claude');
+      if (result?.success) {
+        const newTab = { id: result.sessionId, label: result.label, type: 'claude' };
+        setTabs((prev) => [...prev, newTab]);
+        setActiveTabId(result.sessionId);
+      }
+    } catch (err) {
+      console.error('[CodePage] Failed to create code tab:', err);
+    } finally {
+      setCreatingCode(false);
+    }
   }, [codeWorkspaceId]);
 
   const handleNewShell = useCallback(async () => {
     setCreatingShell(true);
     try {
-      const result = await createTerminalSession(codeWorkspaceId);
+      const result = await createTerminalSession(codeWorkspaceId, 'shell');
       if (result?.success) {
         const newTab = { id: result.sessionId, label: result.label, type: 'shell' };
         setTabs((prev) => [...prev, newTab]);
@@ -115,6 +187,19 @@ export default function CodePage({ session, codeWorkspaceId }) {
     setGitStatus(null);
   }, []);
 
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setTabs((prev) => {
+      const dynamicTabs = prev.slice(1);
+      const oldIndex = dynamicTabs.findIndex((t) => t.id === active.id);
+      const newIndex = dynamicTabs.findIndex((t) => t.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const reordered = arrayMove(dynamicTabs, oldIndex, newIndex);
+      return [prev[0], ...reordered];
+    });
+  }, []);
+
   const isOpen = dialogState !== 'closed';
 
   // Build dialog props based on state
@@ -132,6 +217,14 @@ export default function CodePage({ session, codeWorkspaceId }) {
     dialogDescription = 'Your session contains unsaved changes. To keep them, commit and push your changes before closing. If you close now, those changes will be lost.';
   }
 
+  // Look up closing tab type for the confirm dialog description
+  const closingTab = closingTabId ? tabs.find((t) => t.id === closingTabId) : null;
+  const closingTabDescription = closingTab?.type === 'claude'
+    ? 'This will end the Claude Code session.'
+    : 'This will end the shell session.';
+
+  const dynamicTabIds = tabs.slice(1).map((t) => t.id);
+
   return (
     <ChatNavProvider value={{ activeChatId: null, navigateToChat: (id) => { window.location.href = id ? `/chat/${id}` : '/'; } }}>
       <SidebarProvider>
@@ -142,51 +235,53 @@ export default function CodePage({ session, codeWorkspaceId }) {
 
             {/* Tab bar */}
             <div className="flex items-end gap-0 px-4 bg-muted/30 border-b border-border shrink-0 overflow-hidden">
-              {tabs.map((tab) => {
-                const isActive = activeTabId === tab.id;
-                return (
-                  <div
-                    key={tab.id}
-                    className={cn(
-                      'group flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono rounded-t-md border border-b-0 transition-colors cursor-pointer',
-                      isActive
-                        ? 'bg-background text-foreground border-border -mb-px'
-                        : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
-                    )}
-                    onClick={() => setActiveTabId(tab.id)}
-                  >
-                    {tab.type === 'claude' ? (
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <polyline points="4,12 4,4 12,4" />
-                        <line x1="7" y1="4" x2="7" y2="12" />
-                      </svg>
-                    ) : (
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="4,6 2,8 4,10" />
-                        <line x1="2" y1="8" x2="10" y2="8" />
-                      </svg>
-                    )}
-                    <span>{tab.label}</span>
-                    <button
-                      className="ml-1 rounded-sm p-0.5 hover:bg-destructive/20 hover:text-destructive transition-all"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (tab.type === 'claude') {
-                          handleOpenCloseDialog();
-                        } else {
-                          setClosingTabId(tab.id);
-                        }
-                      }}
-                      title={tab.type === 'claude' ? 'Close session' : 'Close shell'}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <line x1="4" y1="4" x2="12" y2="12" />
-                        <line x1="12" y1="4" x2="4" y2="12" />
-                      </svg>
-                    </button>
-                  </div>
-                );
-              })}
+              {/* Primary Code tab — pinned, not draggable */}
+              <PinnedTab
+                tab={tabs[0]}
+                isActive={activeTabId === 'claude-code'}
+                onClick={() => setActiveTabId('claude-code')}
+                onClose={() => handleOpenCloseDialog()}
+                closeTitle="Close session"
+              />
+
+              {/* Dynamic tabs — draggable */}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={dynamicTabIds} strategy={horizontalListSortingStrategy}>
+                  {tabs.slice(1).map((tab) => (
+                    <SortableTab
+                      key={tab.id}
+                      tab={tab}
+                      isActive={activeTabId === tab.id}
+                      onClick={() => setActiveTabId(tab.id)}
+                      onClose={() => setClosingTabId(tab.id)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+
+              {/* Loading placeholder tabs */}
+              {creatingCode && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono text-muted-foreground">
+                  <SpinnerIcon size={12} />
+                  <span>Code...</span>
+                </div>
+              )}
+              {creatingShell && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono text-muted-foreground">
+                  <SpinnerIcon size={12} />
+                  <span>Shell...</span>
+                </div>
+              )}
+
+              {/* + buttons */}
+              <button
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium font-mono text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-default"
+                onClick={handleNewCode}
+                disabled={creatingCode}
+                title="New Claude Code tab"
+              >
+                + Code
+              </button>
               <button
                 className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium font-mono text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-default"
                 onClick={handleNewShell}
@@ -210,13 +305,13 @@ export default function CodePage({ session, codeWorkspaceId }) {
               >
                 <TerminalView
                   codeWorkspaceId={codeWorkspaceId}
-                  wsPath={tab.type === 'claude'
+                  wsPath={tab.id === 'claude-code'
                     ? `/code/${codeWorkspaceId}/ws`
                     : `/code/${codeWorkspaceId}/term/${tab.id}/ws`}
                   isActive={activeTabId === tab.id}
                   showToolbar={tab.type === 'claude'}
-                  ensureContainer={tab.type === 'claude' ? ensureCodeWorkspaceContainer : undefined}
-                  onCloseSession={tab.type === 'claude' ? handleOpenCloseDialog : undefined}
+                  ensureContainer={tab.id === 'claude-code' ? ensureCodeWorkspaceContainer : undefined}
+                  onCloseSession={tab.id === 'claude-code' ? handleOpenCloseDialog : undefined}
                 />
               </div>
             ))}
@@ -268,7 +363,7 @@ export default function CodePage({ session, codeWorkspaceId }) {
             <ConfirmDialog
               open
               title="Close terminal?"
-              description="This will end the shell session."
+              description={closingTabDescription}
               confirmLabel="Close"
               variant="default"
               onConfirm={() => {
@@ -281,5 +376,75 @@ export default function CodePage({ session, codeWorkspaceId }) {
         </SidebarInset>
       </SidebarProvider>
     </ChatNavProvider>
+  );
+}
+
+function PinnedTab({ tab, isActive, onClick, onClose, closeTitle }) {
+  return (
+    <div
+      className={cn(
+        'group flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono rounded-t-md border border-b-0 transition-colors cursor-pointer',
+        isActive
+          ? 'bg-background text-foreground border-border -mb-px'
+          : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
+      )}
+      onClick={onClick}
+    >
+      {tab.type === 'claude' ? <CodeIcon size={12} /> : <TerminalIcon size={12} />}
+      <span>{tab.label}</span>
+      <button
+        className="ml-1 rounded-sm p-0.5 hover:bg-destructive/20 hover:text-destructive transition-all"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        title={closeTitle || 'Close'}
+      >
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="4" y1="4" x2="12" y2="12" />
+          <line x1="12" y1="4" x2="4" y2="12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+function SortableTab({ tab, isActive, onClick, onClose }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        'group flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono rounded-t-md border border-b-0 transition-colors cursor-grab active:cursor-grabbing',
+        isActive
+          ? 'bg-background text-foreground border-border -mb-px'
+          : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
+      )}
+      onClick={onClick}
+    >
+      {tab.type === 'claude' ? <CodeIcon size={12} /> : <TerminalIcon size={12} />}
+      <span>{tab.label}</span>
+      <button
+        className="ml-1 rounded-sm p-0.5 hover:bg-destructive/20 hover:text-destructive transition-all"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        title={tab.type === 'claude' ? 'Close code tab' : 'Close shell'}
+      >
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="4" y1="4" x2="12" y2="12" />
+          <line x1="12" y1="4" x2="4" y2="12" />
+        </svg>
+      </button>
+    </div>
   );
 }

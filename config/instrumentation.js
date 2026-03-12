@@ -43,6 +43,14 @@ export async function register() {
   const { initDatabase } = await import('../lib/db/index.js');
   initDatabase();
 
+  // Migrate env vars to DB on first run (idempotent)
+  try {
+    const { migrateEnvToDb } = await import('../lib/db/config.js');
+    migrateEnvToDb();
+  } catch (err) {
+    console.warn('Config migration:', err.message);
+  }
+
   // Start cron scheduler
   const { loadCrons } = await import('../lib/cron.js');
   loadCrons();

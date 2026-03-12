@@ -4,7 +4,7 @@ import { setSecret, setVariable } from './github.mjs';
 import { CONFIG_TARGETS } from './targets.mjs';
 
 /**
- * Sync collected config values to .env and GitHub.
+ * Sync collected config values to .env, DB, and GitHub.
  *
  * Only keys present in `collected` are considered.
  * Only values that actually changed (vs `env`) are written.
@@ -18,9 +18,11 @@ import { CONFIG_TARGETS } from './targets.mjs';
  */
 export async function syncConfig(env, collected, { owner, repo }) {
   const envUpdates = [];
+  const dbUpdates = [];
+  const dbSecretUpdates = [];
   const secretUpdates = [];
   const variableUpdates = [];
-  const isFirstRun = !env?.GH_TOKEN;
+  const isFirstRun = !env?.GH_OWNER;
 
   for (const [key, value] of Object.entries(collected)) {
     const target = CONFIG_TARGETS[key];
@@ -32,6 +34,16 @@ export async function syncConfig(env, collected, { owner, repo }) {
     // .env — write if changed and target has env: true
     if (target.env && changed) {
       envUpdates.push({ key, value });
+    }
+
+    // DB plain config
+    if (target.db && changed && value) {
+      dbUpdates.push({ key, value });
+    }
+
+    // DB encrypted secret
+    if (target.dbSecret && changed && value) {
+      dbSecretUpdates.push({ key, value });
     }
 
     // GitHub secret — only if changed AND value is non-empty
@@ -57,9 +69,10 @@ export async function syncConfig(env, collected, { owner, repo }) {
     }
   }
 
-  const report = { env: [], secrets: [], variables: [], errors: [] };
+  const report = { env: [], db: [], secrets: [], variables: [], errors: [] };
 
-  if (envUpdates.length === 0 && secretUpdates.length === 0 && variableUpdates.length === 0) {
+  if (envUpdates.length === 0 && dbUpdates.length === 0 && dbSecretUpdates.length === 0
+    && secretUpdates.length === 0 && variableUpdates.length === 0) {
     clack.log.info('Config unchanged');
     return report;
   }
@@ -73,6 +86,30 @@ export async function syncConfig(env, collected, { owner, repo }) {
       report.env.push(key);
     }
     clack.log.success(`Updated .env (${report.env.join(', ')})`);
+  }
+
+  // Write DB config values
+  if (dbUpdates.length > 0 || dbSecretUpdates.length > 0) {
+    s.start('Saving settings to database...');
+    try {
+      const { setConfigValue, setConfigSecret } = await import('../../lib/db/config.js');
+
+      for (const { key, value } of dbUpdates) {
+        setConfigValue(key, value, 'setup');
+        report.db.push(key);
+      }
+
+      for (const { key, value } of dbSecretUpdates) {
+        setConfigSecret(key, value, 'setup');
+        report.db.push(key);
+      }
+
+      s.stop(`Saved to database (${report.db.join(', ')})`);
+    } catch (err) {
+      s.stop('Failed to save to database');
+      clack.log.error(`Database error: ${err.message}`);
+      report.errors.push(`Database: ${err.message}`);
+    }
   }
 
   // Set GitHub secrets
