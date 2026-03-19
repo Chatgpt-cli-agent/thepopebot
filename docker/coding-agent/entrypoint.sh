@@ -14,7 +14,7 @@ set -e
 #   RUNTIME             job | headless | workspace | cluster-worker
 #                       Selects the script folder: /scripts/${RUNTIME}/
 #
-#   AGENT               claude-code | pi | gemini
+#   AGENT               claude-code | pi | gemini | codex | opencode
 #                       Selects the agent folder: /scripts/agents/${AGENT}/
 #
 # ── GIT / REPO ───────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ if [ ! -d "/scripts/${RUNTIME}" ]; then
 fi
 
 if [ -z "$AGENT" ]; then
-    echo "ERROR: AGENT env var is required (claude-code, pi, gemini)"
+    echo "ERROR: AGENT env var is required (claude-code, pi, gemini, codex, opencode)"
     exit 1
 fi
 

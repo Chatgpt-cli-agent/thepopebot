@@ -376,7 +376,14 @@ function ProviderCard({ name, slug, credentials, credentialStatuses, onUpdateCre
     />
   ));
 
-  if (slug === 'anthropic') {
+  // OAuth token sections per provider
+  const oauthSections = {
+    anthropic: { tokenType: 'claudeCode', description: 'For Claude Code CLI containers (Pro/Max subscription)' },
+    openai: { tokenType: 'codex', description: 'For Codex CLI containers (ChatGPT Plus/Pro subscription)' },
+  };
+  const oauth = oauthSections[slug];
+
+  if (oauth) {
     return (
       <div>
         <h3 className="text-sm font-medium mb-2">{name}</h3>
@@ -387,7 +394,7 @@ function ProviderCard({ name, slug, credentials, credentialStatuses, onUpdateCre
             </div>
           )}
           <div className="h-px bg-border" />
-          <OAuthTokenList />
+          <OAuthTokenList tokenType={oauth.tokenType} description={oauth.description} />
         </div>
       </div>
     );
@@ -407,7 +414,7 @@ function ProviderCard({ name, slug, credentials, credentialStatuses, onUpdateCre
   );
 }
 
-function OAuthTokenList() {
+function OAuthTokenList({ tokenType = 'claudeCode', description = 'For Claude Code CLI containers (Pro/Max subscription)' }) {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
@@ -419,7 +426,7 @@ function OAuthTokenList() {
 
   const loadTokens = async () => {
     try {
-      const result = await getOAuthTokens('claudeCode');
+      const result = await getOAuthTokens(tokenType);
       setTokens(Array.isArray(result) ? result : []);
     } catch {
       // ignore
@@ -437,7 +444,7 @@ function OAuthTokenList() {
     setCreating(true);
     setError(null);
     try {
-      const result = await createOAuthToken('claudeCode', newName.trim(), newToken.trim());
+      const result = await createOAuthToken(tokenType, newName.trim(), newToken.trim());
       if (result.error) {
         setError(result.error);
       } else {
@@ -484,7 +491,7 @@ function OAuthTokenList() {
       <div className="flex items-center justify-between mb-2">
         <div>
           <span className="text-sm font-medium">OAuth Tokens</span>
-          <p className="text-xs text-muted-foreground">For Claude Code CLI containers (Pro/Max subscription)</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         <button
           onClick={() => setShowDialog(true)}

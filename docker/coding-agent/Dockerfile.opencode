@@ -1,0 +1,9 @@
+FROM coding-agent-base
+
+USER root
+
+RUN npm install -g opencode-ai@latest
+
+USER coding-agent
+
+ENV AGENT=opencode

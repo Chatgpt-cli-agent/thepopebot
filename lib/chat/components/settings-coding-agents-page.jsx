@@ -63,6 +63,15 @@ function DefaultAgentSection({ settings, onReload }) {
   if (settings.pi?.enabled && isPiReady(settings)) {
     available.push({ value: 'pi-coding-agent', label: 'Pi Coding Agent' });
   }
+  if (settings.geminiCli?.enabled && isGeminiCliReady(settings)) {
+    available.push({ value: 'gemini-cli', label: 'Gemini CLI' });
+  }
+  if (settings.codexCli?.enabled && isCodexCliReady(settings)) {
+    available.push({ value: 'codex-cli', label: 'Codex CLI' });
+  }
+  if (settings.openCode?.enabled && isOpenCodeReady(settings)) {
+    available.push({ value: 'opencode', label: 'OpenCode' });
+  }
 
   const handleChange = async (e) => {
     setSaving(true);
@@ -121,7 +130,9 @@ function AgentCards({ settings, onReload }) {
       <div className="space-y-4">
         <ClaudeCodeCard settings={settings} onReload={onReload} />
         <PiCard settings={settings} onReload={onReload} />
-        <OpenCodeCard />
+        <GeminiCliCard settings={settings} onReload={onReload} />
+        <CodexCliCard settings={settings} onReload={onReload} />
+        <OpenCodeCard settings={settings} onReload={onReload} />
       </div>
     </div>
   );
@@ -358,19 +369,287 @@ function PiCard({ settings, onReload }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OpenCode card (coming soon)
+// Gemini CLI card
 // ─────────────────────────────────────────────────────────────────────────────
 
-function OpenCodeCard() {
+function GeminiCliCard({ settings, onReload }) {
+  const config = settings.geminiCli;
+  const ready = isGeminiCliReady(settings);
+
+  const googleModels = getAgentModels(settings, 'google');
+
+  const handleToggle = async () => {
+    await updateCodingAgentConfig('gemini-cli', { enabled: !config.enabled });
+    await onReload();
+  };
+
+  const handleModelChange = async (e) => {
+    await updateCodingAgentConfig('gemini-cli', { model: e.target.value });
+    await onReload();
+  };
+
   return (
-    <div className="rounded-lg border bg-card p-4 opacity-60">
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Gemini CLI</span>
+          {config.enabled && <StatusDot ready={ready} />}
+        </div>
+        <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">Google's official coding agent. Uses your Google API Key.</p>
+
+      {config.enabled && (
+        <div className="border-t border-border pt-3 space-y-3">
+          <CredentialHint
+            ready={config.googleKeySet}
+            readyText="Google API Key is set"
+            missingText="Set your Google API Key on the LLMs page"
+          />
+
+          <div className="border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Model</label>
+              <select
+                value={config.model || ''}
+                onChange={handleModelChange}
+                className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+              >
+                <option value="">Default</option>
+                {googleModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Codex CLI card
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CodexCliCard({ settings, onReload }) {
+  const config = settings.codexCli;
+  const ready = isCodexCliReady(settings);
+
+  const openaiModels = getAgentModels(settings, 'openai');
+
+  const handleToggle = async () => {
+    await updateCodingAgentConfig('codex-cli', { enabled: !config.enabled });
+    await onReload();
+  };
+
+  const handleAuthChange = async (auth) => {
+    await updateCodingAgentConfig('codex-cli', { auth });
+    await onReload();
+  };
+
+  const handleModelChange = async (e) => {
+    await updateCodingAgentConfig('codex-cli', { model: e.target.value });
+    await onReload();
+  };
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Codex CLI</span>
+          {config.enabled && <StatusDot ready={ready} />}
+        </div>
+        <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">OpenAI's official coding agent. Supports API key and ChatGPT OAuth billing.</p>
+
+      {config.enabled && (
+        <div className="border-t border-border pt-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Auth Mode</label>
+            <div className="flex rounded-md border border-border overflow-hidden">
+              <button
+                onClick={() => handleAuthChange('api-key')}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  config.auth === 'api-key'
+                    ? 'bg-foreground text-background'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                API Key
+              </button>
+              <button
+                onClick={() => handleAuthChange('oauth')}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  config.auth === 'oauth'
+                    ? 'bg-foreground text-background'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                ChatGPT OAuth
+              </button>
+            </div>
+          </div>
+
+          {config.auth === 'oauth' ? (
+            <CredentialHint
+              ready={config.oauthTokenCount > 0}
+              readyText={`${config.oauthTokenCount} OAuth token${config.oauthTokenCount !== 1 ? 's' : ''} configured`}
+              missingText="Add a Codex OAuth token on the LLMs page under OpenAI → OAuth Tokens"
+            />
+          ) : (
+            <CredentialHint
+              ready={config.codexKeySet}
+              readyText="Codex API Key is set"
+              missingText="Set your Codex API Key on the LLMs page"
+            />
+          )}
+
+          <div className="border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Model</label>
+              <select
+                value={config.model || ''}
+                onChange={handleModelChange}
+                className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+              >
+                <option value="">Default</option>
+                {openaiModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OpenCode card
+// ─────────────────────────────────────────────────────────────────────────────
+
+function OpenCodeCard({ settings, onReload }) {
+  const config = settings.openCode;
+  const [customModel, setCustomModel] = useState(config.model || '');
+
+  const handleToggle = async () => {
+    await updateCodingAgentConfig('opencode', { enabled: !config.enabled });
+    await onReload();
+  };
+
+  const handleProviderChange = async (e) => {
+    await updateCodingAgentConfig('opencode', { provider: e.target.value, model: '' });
+    setCustomModel('');
+    await onReload();
+  };
+
+  const handleModelChange = async (e) => {
+    await updateCodingAgentConfig('opencode', { model: e.target.value });
+    await onReload();
+  };
+
+  const handleCustomModelSave = useCallback(async () => {
+    await updateCodingAgentConfig('opencode', { model: customModel });
+    await onReload();
+  }, [customModel, onReload]);
+
+  // Build available providers list (same pattern as PiCard)
+  const availableProviders = [];
+  if (settings?.builtinProviders && settings?.credentialStatuses) {
+    const statusMap = new Map(settings.credentialStatuses.map((s) => [s.key, s.isSet]));
+    for (const [slug, prov] of Object.entries(settings.builtinProviders)) {
+      const hasKey = prov.credentials.some((c) => statusMap.get(c.key));
+      if (hasKey) {
+        availableProviders.push({ slug, name: prov.name });
+      }
+    }
+  }
+  if (settings?.customProviders) {
+    for (const cp of settings.customProviders) {
+      availableProviders.push({ slug: cp.key, name: cp.name, isCustom: true });
+    }
+  }
+
+  const ready = isOpenCodeReady(settings);
+  const selectedProviderReady = availableProviders.some(p => p.slug === config.provider);
+  const isCustomProvider = availableProviders.find(p => p.slug === config.provider)?.isCustom;
+  const providerModels = config.provider ? getAgentModels(settings, config.provider) : [];
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">OpenCode</span>
-          <span className="text-xs text-muted-foreground">Coming soon</span>
+          {config.enabled && <StatusDot ready={ready} />}
         </div>
+        <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
       </div>
-      <p className="text-xs text-muted-foreground">Open-source coding agent with multi-provider support.</p>
+      <p className="text-xs text-muted-foreground mb-3">Open-source coding agent with multi-provider support.</p>
+
+      {config.enabled && (
+        <div className="border-t border-border pt-3 space-y-3">
+          {availableProviders.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Provider</label>
+                <select
+                  value={config.provider || ''}
+                  onChange={handleProviderChange}
+                  className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+                >
+                  <option value="">Select provider...</option>
+                  {availableProviders.map((p) => (
+                    <option key={p.slug} value={p.slug}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {config.provider && (
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Model</label>
+                  {isCustomProvider ? (
+                    <input
+                      type="text"
+                      value={customModel}
+                      onChange={(e) => setCustomModel(e.target.value)}
+                      onBlur={handleCustomModelSave}
+                      onKeyDown={(e) => e.key === 'Enter' && handleCustomModelSave()}
+                      placeholder="Leave empty for provider default"
+                      className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+                    />
+                  ) : (
+                    <select
+                      value={config.model || ''}
+                      onChange={handleModelChange}
+                      className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+                    >
+                      <option value="">Default</option>
+                      {providerModels.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {config.provider && !selectedProviderReady && (
+                <CredentialHint
+                  ready={false}
+                  missingText={`${config.provider} API Key is not set. Configure it on the LLMs page.`}
+                />
+              )}
+            </>
+          ) : (
+            <CredentialHint
+              ready={false}
+              missingText="Configure at least one LLM provider on the LLMs page to use OpenCode"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -398,14 +677,35 @@ function isClaudeCodeReady(settings) {
 
 function isPiReady(settings) {
   if (!settings.pi?.enabled || !settings.pi?.provider) return false;
+  return isProviderReady(settings, settings.pi.provider);
+}
+
+function isGeminiCliReady(settings) {
+  if (!settings.geminiCli?.enabled) return false;
+  return settings.geminiCli.googleKeySet;
+}
+
+function isCodexCliReady(settings) {
+  const { codexCli } = settings;
+  if (!codexCli?.enabled) return false;
+  if (codexCli.auth === 'oauth') return codexCli.oauthTokenCount > 0;
+  return codexCli.codexKeySet;
+}
+
+function isOpenCodeReady(settings) {
+  if (!settings.openCode?.enabled || !settings.openCode?.provider) return false;
+  return isProviderReady(settings, settings.openCode.provider);
+}
+
+function isProviderReady(settings, provider) {
   // Check if selected provider has credentials
   const statusMap = new Map((settings.credentialStatuses || []).map(s => [s.key, s.isSet]));
-  const builtin = settings.builtinProviders?.[settings.pi.provider];
+  const builtin = settings.builtinProviders?.[provider];
   if (builtin) {
     return builtin.credentials.some(c => statusMap.get(c.key));
   }
   // Custom provider — always considered ready if it exists
-  return (settings.customProviders || []).some(cp => cp.key === settings.pi.provider);
+  return (settings.customProviders || []).some(cp => cp.key === provider);
 }
 
 function ToggleSwitch({ checked, onChange }) {

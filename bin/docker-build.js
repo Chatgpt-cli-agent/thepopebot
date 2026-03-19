@@ -54,6 +54,21 @@ const IMAGES = [
     context: '.',
     dockerfile: 'docker/event-handler/Dockerfile',
   },
+  {
+    name: 'coding-agent-gemini-cli',
+    context: 'docker/coding-agent',
+    dockerfile: 'docker/coding-agent/Dockerfile.gemini-cli',
+  },
+  {
+    name: 'coding-agent-codex-cli',
+    context: 'docker/coding-agent',
+    dockerfile: 'docker/coding-agent/Dockerfile.codex-cli',
+  },
+  {
+    name: 'coding-agent-opencode',
+    context: 'docker/coding-agent',
+    dockerfile: 'docker/coding-agent/Dockerfile.opencode',
+  },
 ];
 
 // Parse --image flag
