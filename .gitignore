@@ -53,3 +53,4 @@ lib/code/*.js
 !lib/code/index.js
 !lib/code/ws-proxy.js
 !lib/code/terminal-sessions.js
+!lib/code/port-forwards.js

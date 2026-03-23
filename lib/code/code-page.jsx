@@ -18,6 +18,9 @@ import {
   createTerminalSession,
   closeTerminalSession,
   listTerminalSessions,
+  forwardPort,
+  listPortForwards,
+  stopPortForward,
 } from './actions.js';
 
 const TerminalView = dynamic(() => import('./terminal-view.js'), { ssr: false });
@@ -94,6 +97,10 @@ export default function CodePage({ session, codeWorkspaceId }) {
   const [closingTabId, setClosingTabId] = useState(null);
   const [diffStats, setDiffStats] = useState(null);
   const [showDiff, setShowDiff] = useState(false);
+  const [portForwards, setPortForwards] = useState([]);
+  const [portInput, setPortInput] = useState('');
+  const [showPortInput, setShowPortInput] = useState(false);
+  const portInputRef = useRef(null);
 
   const fetchDiffStats = useCallback(async () => {
     try {
@@ -151,6 +158,30 @@ export default function CodePage({ session, codeWorkspaceId }) {
     }
   }, [tabs, codeWorkspaceId]);
 
+  // Load port forwards on mount
+  useEffect(() => {
+    listPortForwards(codeWorkspaceId).then((r) => {
+      if (r?.success) setPortForwards(r.ports || []);
+    });
+  }, [codeWorkspaceId]);
+
+  const handleForwardPort = useCallback(async () => {
+    const port = parseInt(portInput, 10);
+    if (isNaN(port) || port < 1 || port > 65535) return;
+    setShowPortInput(false);
+    setPortInput('');
+    const result = await forwardPort(codeWorkspaceId, port);
+    if (result?.success) {
+      setPortForwards((prev) => [...prev, { port, url: result.url, createdAt: Date.now() }]);
+      window.open(result.url, '_blank');
+    }
+  }, [codeWorkspaceId, portInput]);
+
+  const handleStopPort = useCallback(async (port) => {
+    await stopPortForward(codeWorkspaceId, port);
+    setPortForwards((prev) => prev.filter((p) => p.port !== port));
+  }, [codeWorkspaceId]);
+
   const handleNewCode = useCallback(async () => {
     setCreatingCode(true);
     try {
@@ -198,7 +229,6 @@ export default function CodePage({ session, codeWorkspaceId }) {
 
   const handleCloseTab = useCallback(async (tabId) => {
     const tab = tabs.find((t) => t.id === tabId);
-    // Editor tabs have no container process — skip terminal cleanup
     if (tab?.type !== 'editor') {
       try {
         await closeTerminalSession(codeWorkspaceId, tabId);
@@ -348,6 +378,50 @@ export default function CodePage({ session, codeWorkspaceId }) {
               >
                 + Editor
               </button>
+
+              <button
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium font-mono text-muted-foreground hover:text-foreground rounded-t-md border-t border-x border-dashed border-t-muted-foreground/30 border-x-muted-foreground/20 hover:border-t-muted-foreground/50 hover:border-x-muted-foreground/40 transition-all"
+                onClick={() => { setShowPortInput(true); setPortInput(''); }}
+                title="Forward a port"
+              >
+                + Port
+              </button>
+
+              {/* Active port forwards */}
+              {portForwards.length > 0 && (
+                <div className="flex items-center gap-1 ml-auto">
+                  {portForwards.map((pf) => (
+                    <div
+                      key={pf.port}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-mono text-muted-foreground rounded-t-md border border-b-0 border-emerald-500/30 bg-emerald-500/5"
+                    >
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span>:{pf.port}</span>
+                      <button
+                        className="hover:text-emerald-400 transition-colors"
+                        onClick={() => window.open(pf.url, '_blank')}
+                        title={`Open ${pf.url}`}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M7 3H3v10h10V9" />
+                          <path d="M10 2h4v4" />
+                          <path d="M14 2L7 9" />
+                        </svg>
+                      </button>
+                      <button
+                        className="hover:text-destructive transition-colors"
+                        onClick={() => handleStopPort(pf.port)}
+                        title="Stop forwarding"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                          <line x1="4" y1="4" x2="12" y2="12" />
+                          <line x1="12" y1="4" x2="4" y2="12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Tab content panels — all mounted, hidden via display */}
@@ -425,6 +499,44 @@ export default function CodePage({ session, codeWorkspaceId }) {
               }}
               onCancel={() => setClosingTabId(null)}
             />
+          )}
+          {showPortInput && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="fixed inset-0 bg-black/50" onClick={() => setShowPortInput(false)} />
+              <div className="relative z-50 w-full max-w-xs rounded-lg border border-border bg-background p-6 shadow-lg">
+                <h3 className="text-sm font-medium mb-1">Forward Port</h3>
+                <p className="text-xs text-muted-foreground mb-4">Enter the port number your dev server is running on.</p>
+                <input
+                  ref={portInputRef}
+                  type="number"
+                  min="1"
+                  max="65535"
+                  placeholder="3000"
+                  value={portInput}
+                  onChange={(e) => setPortInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleForwardPort();
+                    if (e.key === 'Escape') setShowPortInput(false);
+                  }}
+                  className="w-full px-3 py-2 text-sm font-mono bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-foreground mb-4"
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    className="px-3 py-1.5 text-xs font-medium rounded-md border border-border hover:bg-muted transition-colors"
+                    onClick={() => setShowPortInput(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-foreground text-background hover:opacity-90 transition-opacity"
+                    onClick={handleForwardPort}
+                  >
+                    Forward
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </SidebarInset>
       </SidebarProvider>
