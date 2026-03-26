@@ -2,7 +2,7 @@
 # Run Claude Code headlessly with the given PROMPT
 # Sets AGENT_EXIT for downstream scripts (commit, push, etc.)
 # PERMISSION: plan = restricted mode, code or empty = full access
-# CONTINUE_SESSION: 1 = continue most recent session (-c)
+# CONTINUE_SESSION: 1 = resume session for this port if session file exists
 
 CLAUDE_ARGS=(-p "$PROMPT" --verbose --output-format stream-json)
 
@@ -20,8 +20,9 @@ else
     CLAUDE_ARGS+=(--dangerously-skip-permissions)
 fi
 
-if [ "$CONTINUE_SESSION" = "1" ]; then
-    CLAUDE_ARGS+=(-c)
+SESSION_FILE="/home/coding-agent/.claude-ttyd-sessions/7681"
+if [ "$CONTINUE_SESSION" = "1" ] && [ -f "$SESSION_FILE" ]; then
+    CLAUDE_ARGS+=(--resume "$(cat $SESSION_FILE)")
 fi
 
 set +e

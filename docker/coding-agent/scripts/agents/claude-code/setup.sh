@@ -15,9 +15,35 @@ cat > ~/.claude/settings.json << 'EOF'
       "WebSearch",
       "WebFetch"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/coding-agent/.claude-ttyd-sessions-hook.sh"
+          }
+        ]
+      }
+    ]
   }
 }
 EOF
+
+# Write the session tracking hook script (run on every SessionStart)
+# Writes Claude Code session_id to .claude-ttyd-sessions/${PORT:-7681} on first boot only
+cat > /home/coding-agent/.claude-ttyd-sessions-hook.sh << 'EOF'
+#!/bin/bash
+SESSION_ID=$(cat | jq -r .session_id 2>/dev/null)
+[ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ] && exit 0
+DIR=/home/coding-agent/.claude-ttyd-sessions
+mkdir -p "$DIR"
+FILE="$DIR/${PORT:-7681}"
+[ ! -f "$FILE" ] && echo "$SESSION_ID" > "$FILE"
+exit 0
+EOF
+chmod +x /home/coding-agent/.claude-ttyd-sessions-hook.sh
 
 cat > ~/.claude.json << ENDJSON
 {
