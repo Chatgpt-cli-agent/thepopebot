@@ -278,11 +278,11 @@ export default function TerminalView({ codeWorkspaceId, wsPath, isActive = true,
   useEffect(() => {
     if (isActive && termRef.current && fitAddonRef.current) {
       requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
+        sendResize();
         termRef.current?.focus();
       });
     }
-  }, [isActive]);
+  }, [isActive, sendResize]);
 
   const sendCommand = useCallback((text) => {
     const ws = wsRef.current;
