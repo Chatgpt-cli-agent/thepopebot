@@ -89,6 +89,7 @@ RUN useradd -m -s /bin/bash -u 1001 coding-agent \
 # ──────────────────────────────────────────────
 COPY scripts/ /scripts/
 COPY .tmux.conf /home/coding-agent/.tmux.conf
+COPY .tmux.conf /scripts/.tmux.conf
 COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \

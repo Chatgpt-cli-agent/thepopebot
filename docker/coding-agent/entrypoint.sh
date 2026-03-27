@@ -86,6 +86,11 @@ if [ ! -d "/scripts/agents/${AGENT}" ]; then
     exit 1
 fi
 
+# Copy tmux config if missing (bind mount shadows the image's /home/coding-agent)
+if [ ! -f ~/.tmux.conf ] && [ -f /scripts/.tmux.conf ]; then
+    cp /scripts/.tmux.conf ~/.tmux.conf
+fi
+
 for script in /scripts/${RUNTIME}/*.sh; do
     # Transform "1_setup-git.sh" → "Setup Git"
     pretty=$(basename "$script" .sh | sed 's/^[0-9]*_//' | sed 's/[-_]/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
