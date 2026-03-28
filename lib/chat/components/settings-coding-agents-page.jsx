@@ -200,6 +200,7 @@ function ClaudeCodeCard({ settings, onReload }) {
     await updateCodingAgentConfig('claude-code', { backend: newBackend, model: newModel });
     setSaving(false);
     await onReload();
+    showSaved();
   };
 
   const handleAuthChange = async (auth) => {
@@ -207,13 +208,24 @@ function ClaudeCodeCard({ settings, onReload }) {
     await onReload();
   };
 
+  const [saved, setSaved] = useState(false);
+
+  const showSaved = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
   const handleModelChange = async (e) => {
     await updateCodingAgentConfig('claude-code', { model: e.target.value });
     await onReload();
+    showSaved();
   };
 
+  const [modelSaving, setModelSaving] = useState(false);
   const handleModelTextSave = async () => {
+    setModelSaving(true);
     await updateCodingAgentConfig('claude-code', { model: modelText });
+    setModelSaving(false);
     await onReload();
   };
 
@@ -230,7 +242,11 @@ function ClaudeCodeCard({ settings, onReload }) {
           <span className="text-sm font-medium">Claude Code</span>
           <StatusDot ready={ready} />
         </div>
-        <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+        <div className="flex items-center gap-3">
+          {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
+          {!saving && saved && <span className="text-xs text-green-500 inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span>}
+          <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground mb-3">Anthropic's official coding agent. Supports plan and code permission modes.</p>
 
@@ -239,10 +255,8 @@ function ClaudeCodeCard({ settings, onReload }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Backend API</label>
-              <div className="flex items-center gap-3">
-                {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
-                <select
-                  value={backend}
+              <select
+                value={backend}
                 onChange={handleBackendChange}
                 className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
               >
@@ -250,7 +264,6 @@ function ClaudeCodeCard({ settings, onReload }) {
                   <option key={b.slug} value={b.slug}>{b.name}</option>
                 ))}
               </select>
-              </div>
             </div>
             {backendOptions.length <= 1 && (
               <p className="text-xs text-muted-foreground">
@@ -340,15 +353,15 @@ function ClaudeCodeCard({ settings, onReload }) {
                 />
               )}
             </div>
-            {backendModels.length === 0 && backend !== 'anthropic' && (
-              <div className="flex justify-end mt-2">
-                <button onClick={handleModelTextSave} disabled={modelText === (config.model || '')}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors">
-                  Save
-                </button>
-              </div>
-            )}
           </div>
+          {backendModels.length === 0 && backend !== 'anthropic' && (
+            <div className="flex justify-end mt-4">
+              <button onClick={handleModelTextSave} disabled={modelText === (config.model || '') || modelSaving}
+                className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
+                {modelSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -362,6 +375,12 @@ function ClaudeCodeCard({ settings, onReload }) {
 function PiCard({ settings, onReload }) {
   const config = settings.pi;
   const [modelText, setModelText] = useState(config.model || '');
+  const [saved, setSaved] = useState(false);
+
+  const showSaved = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   const handleToggle = async () => {
     await updateCodingAgentConfig('pi-coding-agent', { enabled: !config.enabled });
@@ -376,15 +395,20 @@ function PiCard({ settings, onReload }) {
     setModelText(newModel);
     await updateCodingAgentConfig('pi-coding-agent', { provider: newProvider, model: newModel });
     await onReload();
+    showSaved();
   };
 
   const handleModelChange = async (e) => {
     await updateCodingAgentConfig('pi-coding-agent', { model: e.target.value });
     await onReload();
+    showSaved();
   };
 
+  const [modelSaving, setModelSaving] = useState(false);
   const handleModelTextSave = async () => {
+    setModelSaving(true);
     await updateCodingAgentConfig('pi-coding-agent', { model: modelText });
+    setModelSaving(false);
     await onReload();
   };
 
@@ -420,7 +444,10 @@ function PiCard({ settings, onReload }) {
           <span className="text-sm font-medium">Pi Coding Agent</span>
           {config.enabled && <StatusDot ready={ready} />}
         </div>
-        <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-xs text-green-500 inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span>}
+          <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground mb-3">Third-party agent by Mario Zechner. Works with 20+ LLM providers.</p>
 
@@ -469,20 +496,20 @@ function PiCard({ settings, onReload }) {
                 </div>
               )}
 
-              {config.provider && providerModels.length === 0 && (
-                <div className="flex justify-end">
-                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '')}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors">
-                    Save
-                  </button>
-                </div>
-              )}
-
               {config.provider && !selectedProviderReady && (
                 <CredentialHint
                   ready={false}
                   missingText={`${config.provider} API Key is not set. Configure it on the LLMs page.`}
                 />
+              )}
+
+              {config.provider && providerModels.length === 0 && (
+                <div className="flex justify-end mt-1">
+                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '') || modelSaving}
+                    className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
+                    {modelSaving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
               )}
             </>
           ) : (
@@ -663,6 +690,12 @@ function CodexCliCard({ settings, onReload }) {
 function OpenCodeCard({ settings, onReload }) {
   const config = settings.openCode;
   const [modelText, setModelText] = useState(config.model || '');
+  const [saved, setSaved] = useState(false);
+
+  const showSaved = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   const handleToggle = async () => {
     await updateCodingAgentConfig('opencode', { enabled: !config.enabled });
@@ -676,15 +709,20 @@ function OpenCodeCard({ settings, onReload }) {
     setModelText(newModel);
     await updateCodingAgentConfig('opencode', { provider: newProvider, model: newModel });
     await onReload();
+    showSaved();
   };
 
   const handleModelChange = async (e) => {
     await updateCodingAgentConfig('opencode', { model: e.target.value });
     await onReload();
+    showSaved();
   };
 
+  const [modelSaving, setModelSaving] = useState(false);
   const handleModelTextSave = async () => {
+    setModelSaving(true);
     await updateCodingAgentConfig('opencode', { model: modelText });
+    setModelSaving(false);
     await onReload();
   };
 
@@ -720,7 +758,10 @@ function OpenCodeCard({ settings, onReload }) {
           <span className="text-sm font-medium">OpenCode</span>
           {config.enabled && <StatusDot ready={ready} />}
         </div>
-        <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-xs text-green-500 inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span>}
+          <ToggleSwitch checked={config.enabled} onChange={handleToggle} />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground mb-3">Open-source coding agent with multi-provider support.</p>
 
@@ -769,20 +810,20 @@ function OpenCodeCard({ settings, onReload }) {
                 </div>
               )}
 
-              {config.provider && providerModels.length === 0 && (
-                <div className="flex justify-end">
-                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '')}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors">
-                    Save
-                  </button>
-                </div>
-              )}
-
               {config.provider && !selectedProviderReady && (
                 <CredentialHint
                   ready={false}
                   missingText={`${config.provider} API Key is not set. Configure it on the LLMs page.`}
                 />
+              )}
+
+              {config.provider && providerModels.length === 0 && (
+                <div className="flex justify-end mt-1">
+                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '') || modelSaving}
+                    className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
+                    {modelSaving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
               )}
             </>
           ) : (

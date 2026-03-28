@@ -140,13 +140,28 @@ function ActiveConfig({ settings, onSave }) {
     doSave(provider, modelText, maxTokens);
   };
 
+  // Track whether form has unsaved changes (text-input mode only)
+  const savedModel = settings?.active?.model || '';
+  const savedMaxTokens = settings?.active?.maxTokens || '4096';
+  const hasUnsavedChanges = modelText !== savedModel || maxTokens !== savedMaxTokens;
+
+  const hasModels = (selectedProvider?.models || []).length > 0;
+
   const handleMaxTokensChange = (mt) => {
     setMaxTokens(mt);
-    scheduleAutoSave(provider, model, mt);
+    if (hasModels) {
+      scheduleAutoSave(provider, model, mt);
+    }
   };
 
   return (
     <div className="rounded-lg border bg-card p-4">
+      {hasModels && (saving || saved) && (
+        <div className="flex justify-end mb-2">
+          {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
+          {saved && <span className="text-xs text-green-500 inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span>}
+        </div>
+      )}
       <div className="divide-y divide-border">
         <div className="flex items-center justify-between py-3 first:pt-0">
           <label className="text-sm font-medium shrink-0">Provider</label>
@@ -177,39 +192,35 @@ function ActiveConfig({ settings, onSave }) {
               ))}
             </select>
           ) : (
-            <div>
-              <input
-                type="text"
-                value={modelText}
-                onChange={(e) => setModelText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleModelTextSave()}
-                placeholder="Model name"
-                className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-              />
-              <div className="flex justify-end mt-2">
-                <button onClick={handleModelTextSave} disabled={modelText === model || saving}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors">
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-            </div>
+            <input
+              type="text"
+              value={modelText}
+              onChange={(e) => setModelText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleModelTextSave()}
+              placeholder="Model name"
+              className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+            />
           )}
         </div>
 
         <div className="flex items-center justify-between py-3 last:pb-0">
           <label className="text-sm font-medium shrink-0">Max Tokens</label>
-          <div className="flex items-center gap-3">
-            {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
-            {saved && <span className="text-xs text-green-500 inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span>}
-            <input
-              type="number"
-              value={maxTokens}
-              onChange={(e) => handleMaxTokensChange(e.target.value)}
-              className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-            />
-          </div>
+          <input
+            type="number"
+            value={maxTokens}
+            onChange={(e) => handleMaxTokensChange(e.target.value)}
+            className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+          />
         </div>
       </div>
+      {!hasModels && (
+        <div className="flex justify-end mt-4">
+          <button onClick={handleModelTextSave} disabled={!hasUnsavedChanges || saving}
+            className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

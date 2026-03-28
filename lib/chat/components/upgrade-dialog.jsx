@@ -44,7 +44,7 @@ export function UpgradeDialog({ open, onClose, version, updateAvailable, changel
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={handleClose} />
-      <div className="relative z-50 w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="relative z-50 w-full max-w-md mx-4 rounded-lg border border-border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
         {result === 'success' ? (
           <>
             <div className="flex items-center justify-between mb-4">

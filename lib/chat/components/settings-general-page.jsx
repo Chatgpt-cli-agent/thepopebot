@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { getGeneralSettings, updateGeneralSetting } from '../actions.js';
+import { ArrowUpCircleIcon } from './icons.js';
+import { UpgradeDialog } from './upgrade-dialog.js';
 
 export function SettingsGeneralPage({ session }) {
   const [loading, setLoading] = useState(true);
@@ -10,6 +12,10 @@ export function SettingsGeneralPage({ session }) {
   const [emailAddress, setEmailAddress] = useState(session?.user?.email || '');
   const [emailSigningUp, setEmailSigningUp] = useState(false);
   const [emailSubscribed, setEmailSubscribed] = useState(false);
+  const [version, setVersion] = useState(null);
+  const [updateAvailable, setUpdateAvailable] = useState(null);
+  const [changelog, setChangelog] = useState(null);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
 
   useEffect(() => {
     getGeneralSettings().then((result) => {
@@ -17,6 +23,11 @@ export function SettingsGeneralPage({ session }) {
         setIncludeBeta(result.settings.UPGRADE_INCLUDE_BETA === 'true');
       }
       setLoading(false);
+    });
+    fetch('/admin/app-version').then(r => r.json()).then(data => {
+      setVersion(data.version);
+      setUpdateAvailable(data.updateAvailable);
+      setChangelog(data.changelog);
     });
   }, []);
 
@@ -31,6 +42,13 @@ export function SettingsGeneralPage({ session }) {
     const data = await res.json();
     setChecking(false);
     setCheckResult(data.updateAvailable ? 'updated' : 'current');
+    if (data.updateAvailable) {
+      setVersion(data.version);
+      setUpdateAvailable(data.updateAvailable);
+      setChangelog(data.changelog);
+    } else {
+      setUpdateAvailable(null);
+    }
     setTimeout(() => setCheckResult(null), 3000);
   };
 
@@ -72,6 +90,24 @@ export function SettingsGeneralPage({ session }) {
           Configure how the system checks for new versions.
           </p>
         </div>
+
+        {updateAvailable && (
+          <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <ArrowUpCircleIcon size={20} className="text-emerald-500 shrink-0" />
+              <p className="text-sm font-medium">
+                Version <span className="font-mono text-emerald-500">v{updateAvailable}</span> is available
+              </p>
+            </div>
+            <button
+              onClick={() => setShowUpgradeDialog(true)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+            >
+              <ArrowUpCircleIcon size={16} />
+              Upgrade to v{updateAvailable}
+            </button>
+          </div>
+        )}
 
         <div className="rounded-lg border bg-card p-4 space-y-4">
           <div className="flex items-center gap-3">
@@ -185,6 +221,13 @@ export function SettingsGeneralPage({ session }) {
           )}
         </div>
       </div>
+      <UpgradeDialog
+        open={showUpgradeDialog}
+        onClose={() => setShowUpgradeDialog(false)}
+        version={version}
+        updateAvailable={updateAvailable}
+        changelog={changelog}
+      />
     </div>
   );
 }
