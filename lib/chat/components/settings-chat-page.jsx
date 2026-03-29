@@ -156,7 +156,7 @@ function ActiveConfig({ settings, onSave }) {
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      {hasModels && (saving || saved) && (
+      {(saving || saved) && (
         <div className="flex justify-end mb-2">
           {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
           {saved && <span className="text-xs text-green-500 inline-flex items-center gap-1"><CheckIcon size={12} /> Saved</span>}
@@ -217,7 +217,7 @@ function ActiveConfig({ settings, onSave }) {
         <div className="flex justify-end mt-4">
           <button onClick={handleModelTextSave} disabled={!hasUnsavedChanges || saving}
             className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
-            {saving ? 'Saving...' : 'Save'}
+            Save
           </button>
         </div>
       )}

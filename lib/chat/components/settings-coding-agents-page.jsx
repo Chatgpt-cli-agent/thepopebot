@@ -221,12 +221,12 @@ function ClaudeCodeCard({ settings, onReload }) {
     showSaved();
   };
 
-  const [modelSaving, setModelSaving] = useState(false);
   const handleModelTextSave = async () => {
-    setModelSaving(true);
+    setSaving(true);
     await updateCodingAgentConfig('claude-code', { model: modelText });
-    setModelSaving(false);
+    setSaving(false);
     await onReload();
+    showSaved();
   };
 
   // Credential hint for third-party backends
@@ -356,9 +356,9 @@ function ClaudeCodeCard({ settings, onReload }) {
           </div>
           {backendModels.length === 0 && backend !== 'anthropic' && (
             <div className="flex justify-end mt-4">
-              <button onClick={handleModelTextSave} disabled={modelText === (config.model || '') || modelSaving}
+              <button onClick={handleModelTextSave} disabled={modelText === (config.model || '')}
                 className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
-                {modelSaving ? 'Saving...' : 'Save'}
+                Save
               </button>
             </div>
           )}
@@ -404,12 +404,10 @@ function PiCard({ settings, onReload }) {
     showSaved();
   };
 
-  const [modelSaving, setModelSaving] = useState(false);
   const handleModelTextSave = async () => {
-    setModelSaving(true);
     await updateCodingAgentConfig('pi-coding-agent', { model: modelText });
-    setModelSaving(false);
     await onReload();
+    showSaved();
   };
 
   // Build available providers list (builtin with keys set + custom providers)
@@ -505,9 +503,9 @@ function PiCard({ settings, onReload }) {
 
               {config.provider && providerModels.length === 0 && (
                 <div className="flex justify-end mt-1">
-                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '') || modelSaving}
+                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '')}
                     className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
-                    {modelSaving ? 'Saving...' : 'Save'}
+                    Save
                   </button>
                 </div>
               )}
@@ -718,12 +716,10 @@ function OpenCodeCard({ settings, onReload }) {
     showSaved();
   };
 
-  const [modelSaving, setModelSaving] = useState(false);
   const handleModelTextSave = async () => {
-    setModelSaving(true);
     await updateCodingAgentConfig('opencode', { model: modelText });
-    setModelSaving(false);
     await onReload();
+    showSaved();
   };
 
   // Build available providers list (same pattern as PiCard)
@@ -819,9 +815,9 @@ function OpenCodeCard({ settings, onReload }) {
 
               {config.provider && providerModels.length === 0 && (
                 <div className="flex justify-end mt-1">
-                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '') || modelSaving}
+                  <button onClick={handleModelTextSave} disabled={modelText === (config.model || '')}
                     className="rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors">
-                    {modelSaving ? 'Saving...' : 'Save'}
+                    Save
                   </button>
                 </div>
               )}
